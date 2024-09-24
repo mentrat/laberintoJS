@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego de Laberinto con Dificultades y Niveles</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="laberintoCanvas" width="600" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById('laberintoCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const tamanoCelda = 40;
+        let filas = 10;
+        let columnas = 10;
+        let nivel = 1; // Nivel inicial
+
+        let laberinto = [];
+        const jugador = { x: 0, y: 1 };
+        const trampas = [];
+        const teletransportes = [];
+        let objeto = { x: columnas - 1, y: filas - 1 };
+        let objetoRecogido = false;
+
+        // Ajuste de dificultad
+        const dificultad = {
+            facil: { trampas: 4, teletransportes: 1, incrementoTamano: 2 },
+            medio: { trampas: 6, teletransportes: 2, incrementoTamano: 3 },
+            dificil: { trampas: 8, teletransportes: 3, incrementoTamano: 4 },
+        };
+
+        let modoActual = dificultad.facil; // Comienza en modo fácil
+
+        function generarLaberintoAleatorio() {
+            laberinto = Array(filas).fill().map(() => Array(columnas).fill(1));
+
+            const esValida = (x, y) => x >= 0 && x < columnas && y >= 0 && y < filas && laberinto[y][x] === 1;
+
+            function generarCamino(x, y) {
+                laberinto[y][x] = 0;
+                const direcciones = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+                direcciones.sort(() => Math.random() - 0.5);
+
+                for (let [dx, dy] of direcciones) {
+                    const nuevoX = x + dx * 2, nuevoY = y + dy * 2;
+                    if (esValida(nuevoX, nuevoY)) {
+                        laberinto[y + dy][x + dx] = 0;
+                        generarCamino(nuevoX, nuevoY);
+                    }
+                }
+            }
+
+            generarCamino(1, 1);
+            laberinto[1][0] = 0;
+
+            // Colocar el objeto en una posición aleatoria accesible
+            do {
+                objeto.x = Math.floor(Math.random() * columnas);
+                objeto.y = Math.floor(Math.random() * filas);
+            } while (laberinto[objeto.y][objeto.x] === 1 || (objeto.x === 0 && objeto.y === 1));
+
+            objetoRecogido = false;
+            generarTrampas();
+            generarTeletransportes();
+        }
+
+        function generarTrampas() {
+            trampas.length = 0;
+            for (let i = 0; i < modoActual.trampas; i++) {
+                let x, y;
+                do {
+                    x = Math.floor(Math.random() * columnas);
+                    y = Math.floor(Math.random() * filas);
+                } while (laberinto[y][x] === 1 || (x === jugador.x && y === jugador.y) || (x === objeto.x && y === objeto.y));
+                trampas.push({ x, y, visible: false, contador: 0 });
+            }
+        }
+
+        function generarTeletransportes() {
+            teletransportes.length = 0;
+            for (let i = 0; i < modoActual.teletransportes; i++) {
+                let x, y;
+                do {
+                    x = Math.floor(Math.random() * columnas);
+                    y = Math.floor(Math.random() * filas);
+                } while (laberinto[y][x] === 1 || (x === jugador.x && y === jugador.y) || (x === objeto.x && y === objeto.y));
+                teletransportes.push({ x, y });
+            }
+        }
+
+        function dibujarLaberinto() {
+            for (let y = 0; y < filas; y++) {
+                for (let x = 0; x < columnas; x++) {
+                    if (laberinto[y][x] === 1) {
+                        ctx.fillStyle = 'black';
+                    } else if (x === objeto.x && y === objeto.y && !objetoRecogido) {
+                        ctx.fillStyle = 'green'; // Objeto antes de ser recogido
+                    } else {
+                        ctx.fillStyle = 'white';
+                    }
+                    ctx.fillRect(x * tamanoCelda, y * tamanoCelda, tamanoCelda, tamanoCelda);
+                }
+            }
+        }
+
+        function dibujarJugador() {
+            ctx.fillStyle = 'red';
+            ctx.fillRect(jugador.x * tamanoCelda, jugador.y * tamanoCelda, tamanoCelda, tamanoCelda);
+        }
+
+        function dibujarTrampas() {
+            trampas.forEach(trampa => {
+                if (trampa.visible) {
+                    ctx.fillStyle = 'blue';
+                    ctx.fillRect(trampa.x * tamanoCelda, trampa.y * tamanoCelda, tamanoCelda, tamanoCelda);
+                }
+            });
+        }
+
+        function dibujarTeletransportes() {
+            teletransportes.forEach(tp => {
+                ctx.fillStyle = 'purple';
+                ctx.fillRect(tp.x * tamanoCelda, tp.y * tamanoCelda, tamanoCelda, tamanoCelda);
+            });
+        }
+
+        function actualizarTrampas() {
+            trampas.forEach(trampa => {
+                trampa.contador++;
+                if (trampa.contador >= 60) {
+                    trampa.visible = !trampa.visible;
+                    trampa.contador = 0;
+                }
+                if (trampa.visible && trampa.x === jugador.x && trampa.y === jugador.y) {
+                    alert('¡Has caído en una trampa! Juego terminado.');
+                    reiniciarJuego();
+                }
+            });
+        }
+
+        function verificarTeletransporte() {
+            teletransportes.forEach(tp => {
+                if (tp.x === jugador.x && tp.y === jugador.y) {
+                    let nuevoX, nuevoY;
+                    do {
+                        nuevoX = Math.floor(Math.random() * columnas);
+                        nuevoY = Math.floor(Math.random() * filas);
+                    } while (laberinto[nuevoY][nuevoX] === 1 || (nuevoX === jugador.x && nuevoY === jugador.y));
+                    jugador.x = nuevoX;
+                    jugador.y = nuevoY;
+                    alert('¡Teletransportado!');
+                }
+            });
+        }
+
+        function actualizarJuego() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            dibujarLaberinto();
+            dibujarTrampas();
+            dibujarTeletransportes();
+            dibujarJugador();
+            actualizarTrampas();
+            verificarTeletransporte();
+
+            if (jugador.x === objeto.x && jugador.y === objeto.y && !objetoRecogido) {
+                objetoRecogido = true;
+                alert('¡Has recogido el objeto! Ahora regresa al punto de inicio.');
+            }
+
+            if (objetoRecogido && jugador.x === 0 && jugador.y === 1) {
+                alert(`¡Nivel ${nivel} completado!`);
+                siguienteNivel();
+            }
+
+            requestAnimationFrame(actualizarJuego);
+        }
+
+        function siguienteNivel() {
+            nivel++;
+            if (nivel > 15) {
+                alert('¡Felicidades! Has completado el juego.');
+                reiniciarJuego();
+            } else {
+                ajustarDificultad();
+                aumentarTamanoLaberinto();
+                reiniciarJuego();
+            }
+        }
+
+        function ajustarDificultad() {
+            if (nivel <= 5) {
+                modoActual = dificultad.facil;
+            } else if (nivel <= 10) {
+                modoActual = dificultad.medio;
+            } else {
+                modoActual = dificultad.dificil;
+            }
+        }
+
+        function aumentarTamanoLaberinto() {
+            if (nivel % 5 === 0) {
+                filas += modoActual.incrementoTamano;
+                columnas += modoActual.incrementoTamano;
+                canvas.width = columnas * tamanoCelda;
+                canvas.height = filas * tamanoCelda;
+            }
+        }
+
+        function reiniciarJuego() {
+            jugador.x = 0;
+            jugador.y = 1;
+            generarLaberintoAleatorio();
+        }
+
+        document.addEventListener('keydown', (e) => {
+            let nuevoX = jugador.x;
+            let nuevoY = jugador.y;
+
+            switch (e.key) {
+                case 'ArrowUp': nuevoY--; break;
+                case 'ArrowDown': nuevoY++; break;
+                case 'ArrowLeft': nuevoX--; break;
+                case 'ArrowRight': nuevoX++; break;
+            }
+
+            if (
+                nuevoX >= 0 && nuevoX < columnas &&
+                nuevoY >= 0 && nuevoY < filas &&
+                laberinto[nuevoY][nuevoX] === 0
+            ) {
+                jugador.x = nuevoX;
+                jugador.y = nuevoY;
+            }
+        });
+
+        reiniciarJuego();
+        actualizarJuego();
+    </script>
+</body>
+
+</html>
